@@ -1,10 +1,10 @@
 /*
  Beschaltung: Pin 1 offen (Reset)
- Pin 2 Ausgang fuer LED Port B3
- Pin 3
+ Pin 2 Ausgang fuer LED
+ Pin 3 Ausgang fuer LED
  Pin 4 Ground, Masse
- Pin 5
- Pin 6
+ Pin 5 Ausgang fuer LED
+ Pin 6 Ausgang fuer LED
  Pin 7 Taster
  Pin 8 Vcc, +3,7V
  */
@@ -18,6 +18,11 @@
 #include <avr/sleep.h>
 #include <avr/pgmspace.h>
 #include <util/delay.h>
+
+
+//-----------------------------------------------------------------------------
+volatile uint8_t ucState = 0;
+
 
 //-----------------------------------------------------------------------------
 // 0=16ms, 1=32ms,2=64ms,3=128ms,4=250ms,5=500ms,6=1 sec,7=2 sec, 8=4 sec, 9= 8sec
@@ -35,17 +40,16 @@ void setup_watchdog(uint8_t ii) {
 
 //-----------------------------------------------------------------------------
 void system_sleep() {
-	set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+	set_sleep_mode(SLEEP_MODE_IDLE);
 	sleep_mode();
 }
-
-uint8_t ucState = 0;
 
 //-----------------------------------------------------------------------------
 int delay_seconds_by_watchdog(uint16_t sec) {
 	uint16_t t1;
 	uint8_t t2; //t2 ist die tatsaechliche Watchdog-Zeit in Sekunden
 	uint8_t t3; //t3 ist der zugehoerige Parameter hierzu
+	uint8_t ucOrigState = ucState;
 	t1 = sec;
 	while (t1 > 0) {
 		if (t1 > 7) {
@@ -63,7 +67,7 @@ int delay_seconds_by_watchdog(uint16_t sec) {
 		};
 		setup_watchdog(t3);
 		system_sleep();
-		if (ucState != 2) {
+		if (ucState != ucOrigState) {
 			return (0);
 		}
 		t1 -= t2;
@@ -77,7 +81,7 @@ ISR(WDT_vect) {
 
 //-----------------------------------------------------------------------------
 ISR(INT0_vect) {
-//	if ((PINB & (1 << PB2)) != 0) {
+	if ((PINB & (1 << PB2)) != 0) {
 		switch (ucState) {
 		case 0:
 			ucState = 1;
@@ -86,13 +90,15 @@ ISR(INT0_vect) {
 			ucState = 3;
 			break;
 		}
-//	}
+	}
 }
 
 //-----------------------------------------------------------------------------
 int main(void) {
-	MCUCR |= (1<<ISC00) | (1<<ISC01);
+	MCUCR &= ~((1<<ISC01)|(1<<ISC00));
 	GIMSK |= (1<<INT0);
+
+	PORTB |= (1<<PB2);
 
 	sei();
 	for (;;) {
@@ -101,11 +107,18 @@ int main(void) {
 		case 0:
 			setup_watchdog(9);
 			system_sleep();
+//			DDRB = (1 << PB0) | (1 << PB1) | (1 << PB3) | (1 << PB4);
+//			PORTB |= (1 << PB0) | (1 << PB1) | (1 << PB3) | (1 << PB4);
+//			_delay_ms(40);
+//			PORTB &= ~((1 << PB0) | (1 << PB1) | (1 << PB3) | (1 << PB4));
+//			DDRB = 0;
 			break;
 		case 1:
-			DDRB = (1 << PB3);
-			PORTB |= (1 << PB3);
-			_delay_ms(200);
+			DDRB = (1 << PB0) | (1 << PB1) | (1 << PB3) | (1 << PB4);
+			PORTB |= (1 << PB0) | (1 << PB1) | (1 << PB3) | (1 << PB4);
+			GIMSK &= ~(1<<INT0);
+			delay_seconds_by_watchdog(1);
+			GIMSK |= (1<<INT0);
 			ucState = 2;
 			break;
 		case 2:
@@ -113,9 +126,11 @@ int main(void) {
 			ucState = 3;
 			break;
 		case 3:
-			PORTB &= ~(1 << PB3);
+			PORTB &= ~((1 << PB0) | (1 << PB1) | (1 << PB3) | (1 << PB4));
 			DDRB = 0;
-			_delay_ms(200);
+			GIMSK &= ~(1<<INT0);
+			delay_seconds_by_watchdog(1);
+			GIMSK |= (1<<INT0);
 			ucState = 0;
 			break;
 		}
