@@ -40,7 +40,7 @@ void setup_watchdog(uint8_t ii) {
 
 //-----------------------------------------------------------------------------
 void system_sleep() {
-	set_sleep_mode(SLEEP_MODE_IDLE);
+	set_sleep_mode(SLEEP_MODE_PWR_DOWN);
 	sleep_mode();
 }
 
